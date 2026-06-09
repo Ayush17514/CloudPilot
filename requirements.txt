@@ -1,0 +1,26 @@
+# ==============================================================================
+# CLOUDPILOT AI — DEPLOYMENT REQUIREMENTS SPECIFICATIONS
+# ==============================================================================
+# Platform Target: Vercel (Full-Stack Node.js + Express + React Single-Page Application)
+# Note: Vercel uses package.json to resolve Node dependencies. This file acts as 
+# the explicit environment and configuration reference checklist for Vercel.
+# ==============================================================================
+
+# --- RUNTIME ENGINES & COMPILERS ---
+node >= 18.0.0
+npm >= 9.0.0
+typescript >= 5.0.0
+
+# --- REQUIRED ENVIRONMENT VARIABLES (To be configured in Vercel Settings) ---
+# Paste your active Google Gemini API Key here for server-side analysis
+# Do NOT prefix with VITE_ to keep it completely secured on the server!
+GEMINI_API_KEY=
+
+# --- PLATFORM BUILD & ROUTING CONFIGURATION ---
+# The project utilizes Vite to build the React user interface into "/dist" 
+# and an Express.js backend for secure proxying of FinOps LLM telemetry analysis routines.
+#
+# Vite Build Command:     vite build
+# Bundled server:         esbuild server.ts --bundle --platform=node ...
+# Output Static Dir:      /dist
+# API Routing Pattern:    /api/* -> server.ts
