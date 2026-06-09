@@ -1,0 +1,6 @@
+{
+  "name": "CloudPilot AI",
+  "description": "Autonomous FinOps Agent that detects anomalies, investigates resources, and generates executive cost-saving recommendations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
