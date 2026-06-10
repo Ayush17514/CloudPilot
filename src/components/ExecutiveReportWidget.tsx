@@ -25,6 +25,7 @@ export const ExecutiveReportWidget: React.FC<ExecutiveReportWidgetProps> = ({
   const totalPotentialSavings = recommendations.reduce((acc, r) => acc + (r.applied ? 0 : r.monthlySavings), 0);
   const totalAppliedSavings = recommendations.reduce((acc, r) => acc + (r.applied ? r.monthlySavings : 0), 0);
   const projectedFutureSpend = actualMonthlySpend;
+  const formattedDate = new Date().toISOString().replace("T", " ").substring(0, 16) + " UTC";
 
   const handlePrint = () => {
     const printContent = reportRef.current?.innerHTML;
@@ -113,7 +114,7 @@ export const ExecutiveReportWidget: React.FC<ExecutiveReportWidgetProps> = ({
     doc.setFontSize(7);
     doc.setTextColor(100, 116, 139); // slate-500
     doc.text("REPORT UNIQ: CPAI-2026-62184", 195, y + 3, { align: "right" });
-    doc.text("GENERATED: 2026-06-08 18:44 UTC", 195, y + 6.5, { align: "right" });
+    doc.text(`GENERATED: ${formattedDate}`, 195, y + 6.5, { align: "right" });
     doc.text("TARGET ENTITY: ORGANIZATIONAL MASTER", 195, y + 10, { align: "right" });
 
     y += 18;
@@ -437,7 +438,7 @@ export const ExecutiveReportWidget: React.FC<ExecutiveReportWidgetProps> = ({
     // Add header metadata
     csvContent += "CLOUDPILOT AI — EXECUTIVE FINOPS AUDIT REPORT\r\n";
     csvContent += `Report Unique ID,CPAI-2026-62184\r\n`;
-    csvContent += `Generated At,2026-06-08 18:44 UTC\r\n`;
+    csvContent += `Generated At,${formattedDate}\r\n`;
     csvContent += `Target Entity,Organizational Master Account\r\n`;
     csvContent += `Monthly Budget ceiling,$${budget}\r\n`;
     csvContent += `Current Actual Run Rate Spend,$${actualMonthlySpend.toFixed(2)}/mo\r\n`;
@@ -475,7 +476,7 @@ export const ExecutiveReportWidget: React.FC<ExecutiveReportWidgetProps> = ({
   const handleExportJSON = () => {
     const reportData = {
       reportId: "CPAI-2026-62184",
-      generatedAt: "2026-06-08 18:44 UTC",
+      generatedAt: formattedDate,
       targetEntity: "Organizational Master Account",
       summaryMetrics: {
         budget,
@@ -591,7 +592,7 @@ export const ExecutiveReportWidget: React.FC<ExecutiveReportWidgetProps> = ({
 
           <div className="md:text-right text-xs text-slate-500 font-mono space-y-0.5">
             <p>REPORT UNIQ: <strong className="text-slate-800">CPAI-2026-62184</strong></p>
-            <p>GENERATED: <strong>2026-06-08 18:44 UTC</strong></p>
+            <p>GENERATED: <strong>{formattedDate}</strong></p>
             <p>TARGET ENTITY: <strong>Organizational Master Account</strong></p>
           </div>
         </div>

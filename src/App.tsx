@@ -16,6 +16,7 @@ import {
   HelpCircle,
   ChevronRight,
   ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CostDataPoint, CloudResource, Recommendation, AnomalyEvent, AgentStep, AgentLog, InvestigationState } from "./types";
@@ -57,11 +58,7 @@ export default function App() {
     // Recalculates current monthly spend from active resources
     const activeRes = resources.filter((r) => r.status !== "terminated");
     const sumMonthlyCost = activeRes.reduce((acc, r) => {
-      let cost = r.costPerHour;
-      if (r.status === "scaled-down") {
-        cost = r.costPerHour / 4; // Downsized cost fraction
-      }
-      return acc + (cost * 24 * 30);
+      return acc + (r.costPerHour * 24 * 30);
     }, 0);
     
     // Calculates pending (unapplied) savings
@@ -388,6 +385,18 @@ export default function App() {
             <Sparkles className="w-4 h-4 text-rose-400 animate-pulse" />
             Audit Advisor
           </button>
+
+          {/* 🔍 Arize Observability Telemetry Link */}
+          <a
+            href="http://localhost:6006"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold tracking-wide text-emerald-400 hover:text-emerald-300 border border-emerald-500/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all select-none mt-1"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+            <span>Arize Tracing</span>
+            <ExternalLink className="w-3.5 h-3.5 ml-auto text-emerald-500/70" />
+          </a>
 
           <div className="hidden lg:block mt-8 border-t border-slate-900 pt-5 px-3">
             <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono uppercase tracking-widest font-bold">

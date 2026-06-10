@@ -1,15 +1,76 @@
+import dotenv from "dotenv";
+dotenv.config();
+
+// --- Arize Phoenix OTel Tracing (Graceful Degradation) ---
+// Phoenix tracing is optional. If the collector isn't running or deps fail,
+// the server continues with a no-op tracer.
+let tracer: any;
+
+interface NoOpSpan {
+  setAttributes: (attrs: Record<string, any>) => void;
+  setStatus: (status: { code: number; message?: string }) => void;
+  end: () => void;
+}
+
+const noOpSpan: NoOpSpan = {
+  setAttributes: () => {},
+  setStatus: () => {},
+  end: () => {},
+};
+
+const noOpTracer = {
+  startActiveSpan: <T>(name: string, fn: (span: NoOpSpan) => T): T => {
+    return fn(noOpSpan);
+  },
+};
+
+const phoenixEnabled = process.env.PHOENIX_ENABLED !== "false";
+
+if (phoenixEnabled) {
+  try {
+    const phoenixOtel = await import("@arizeai/phoenix-otel");
+    const collectorEndpoint = process.env.PHOENIX_COLLECTOR_ENDPOINT || undefined;
+
+    phoenixOtel.register({
+      projectName: "cloudpilot-ai",
+      ...(collectorEndpoint ? { endpoint: collectorEndpoint } : {}),
+    });
+
+    tracer = phoenixOtel.trace.getTracer("cloudpilot-gemini");
+    console.log("CloudPilot: ✅ Arize Phoenix OTel tracing initialized successfully.");
+  } catch (error: any) {
+    console.warn(
+      `CloudPilot: ⚠️ Arize Phoenix tracing unavailable (${error?.message || "unknown error"}). Running without tracing.`
+    );
+    tracer = noOpTracer;
+  }
+} else {
+  console.log("CloudPilot: Phoenix tracing disabled via PHOENIX_ENABLED=false.");
+  tracer = noOpTracer;
+}
+
+// --- Express Server Setup ---
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 const app = express();
 app.use(express.json());
 
-const PORT = 3000;
+// Use platform-provided PORT (Vercel, Cloud Run, etc.) or default to 3000
+const PORT = parseInt(process.env.PORT || "3000", 10);
+
+// --- Security Headers (Production) ---
+if (process.env.NODE_ENV === "production") {
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    next();
+  });
+}
 
 // Initialize Gemini safely
 let ai: GoogleGenAI | null = null;
@@ -25,12 +86,12 @@ if (apiKey) {
         }
       }
     });
-    console.log("CloudPilot backend: Gemini Client initialized successfully with API key.");
+    console.log("CloudPilot backend: ✅ Gemini Client initialized successfully with API key.");
   } catch (error) {
-    console.error("CloudPilot backend: Error initializing Gemini Client:", error);
+    console.error("CloudPilot backend: ❌ Error initializing Gemini Client:", error);
   }
 } else {
-  console.log("CloudPilot backend: No GEMINI_API_KEY found. Running in offline fallback mode.");
+  console.log("CloudPilot backend: ⚠️ No GEMINI_API_KEY found. Running in offline fallback mode.");
 }
 
 // Define fallback answers for high-fidelity offline operations
@@ -135,61 +196,85 @@ async function generateContentWithRetry(
   aiClient: GoogleGenAI,
   params: { contents: any; config?: any; primaryModel?: string; fallbackModel?: string }
 ) {
-  const primaryModel = params.primaryModel || "gemini-3.5-flash";
-  const fallbackModel = params.fallbackModel || "gemini-flash-latest";
-  
-  const maxRetries = 3;
-  let delay = 1000;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`CloudPilot API: Attempt ${attempt} of generateContent with ${primaryModel}...`);
-      const response = await aiClient.models.generateContent({
-        model: primaryModel,
-        contents: params.contents,
-        config: params.config,
-      });
-      return response;
-    } catch (err: any) {
-      console.warn(`CloudPilot API: Attempt ${attempt} with ${primaryModel} failed. Error:`, err?.message || err);
-      
-      const is503OrRateLimit = 
-        err?.status === 503 || 
-        err?.status === 429 ||
-        (err?.message && (
-          err.message.includes("503") || 
-          err.message.includes("high demand") || 
-          err.message.includes("UNAVAILABLE") || 
-          err.message.includes("ResourceExhausted") || 
-          err.message.includes("429")
-        ));
-      
-      if (attempt === maxRetries) {
-        console.log(`CloudPilot API: All retries with ${primaryModel} failed. Trying fallback model: ${fallbackModel}...`);
-        try {
-          const fallbackResponse = await aiClient.models.generateContent({
-            model: fallbackModel,
-            contents: params.contents,
-            config: params.config,
-          });
-          console.log(`CloudPilot API: Fallback model ${fallbackModel} succeeded.`);
-          return fallbackResponse;
-        } catch (fallbackErr: any) {
-          console.error(`CloudPilot API: Fallback model ${fallbackModel} also failed:`, fallbackErr?.message || fallbackErr);
-          throw fallbackErr;
+  return await tracer.startActiveSpan("generateContentWithRetry", async (parentSpan: any) => {
+    const primaryModel = params.primaryModel || "gemini-2.5-flash";
+    const fallbackModel = params.fallbackModel || "gemini-2.0-flash";
+    
+    parentSpan.setAttributes({
+      "llm.model_name": primaryModel,
+      "input.value": typeof params.contents === "string" ? params.contents : JSON.stringify(params.contents),
+    });
+    
+    const maxRetries = 3;
+    let delay = 1000;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const modelToUse = attempt === maxRetries ? fallbackModel : primaryModel;
+      try {
+        const response = await tracer.startActiveSpan(`gemini-generate-content-attempt-${attempt}`, async (span: any) => {
+          try {
+            console.log(`CloudPilot API: Attempt ${attempt} of generateContent with ${modelToUse}...`);
+            span.setAttributes({
+              "llm.model_name": modelToUse,
+              "input.value": typeof params.contents === "string" ? params.contents : JSON.stringify(params.contents),
+            });
+            
+            const res = await aiClient.models.generateContent({
+              model: modelToUse,
+              contents: params.contents,
+              config: params.config,
+            });
+            
+            span.setAttributes({
+              "output.value": res.text || "",
+            });
+            span.setStatus({ code: 1 }); // OK
+            return res;
+          } catch (err: any) {
+            span.setStatus({ code: 2, message: err?.message || String(err) });
+            throw err;
+          } finally {
+            span.end();
+          }
+        });
+        
+        parentSpan.setAttributes({
+          "output.value": response.text || "",
+        });
+        parentSpan.setStatus({ code: 1 }); // OK
+        parentSpan.end();
+        return response;
+      } catch (err: any) {
+        console.warn(`CloudPilot API: Attempt ${attempt} with ${modelToUse} failed. Error:`, err?.message || err);
+        
+        const is503OrRateLimit = 
+          err?.status === 503 || 
+          err?.status === 429 ||
+          (err?.message && (
+            err.message.includes("503") || 
+            err.message.includes("high demand") || 
+            err.message.includes("UNAVAILABLE") || 
+            err.message.includes("ResourceExhausted") || 
+            err.message.includes("429")
+          ));
+        
+        if (attempt === maxRetries) {
+          parentSpan.setStatus({ code: 2, message: err?.message || String(err) });
+          parentSpan.end();
+          throw err;
+        }
+        
+        if (is503OrRateLimit) {
+          console.log(`CloudPilot API: Transient issue encountered. Retrying in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 2;
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 300));
         }
       }
-      
-      if (is503OrRateLimit) {
-        console.log(`CloudPilot API: Transient issue encountered. Retrying in ${delay}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 2;
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-      }
     }
-  }
-  throw new Error("Failed to generate content after retries");
+    throw new Error("Failed to generate content after retries");
+  });
 }
 
 // REST API: Live CloudPilot Analysis with retry and custom diagnostics fallbacks
@@ -239,8 +324,8 @@ Ensure your output is a single valid JSON string. Do not append any markdown wra
       config: {
         responseMimeType: "application/json",
       },
-      primaryModel: "gemini-3.5-flash",
-      fallbackModel: "gemini-flash-latest"
+      primaryModel: "gemini-2.5-flash",
+      fallbackModel: "gemini-2.0-flash"
     });
 
     const text = response.text;
@@ -310,8 +395,8 @@ Keep answers under 3 paragraphs for layout readability, formatted in attractive 
       config: {
         systemInstruction,
       },
-      primaryModel: "gemini-3.5-flash",
-      fallbackModel: "gemini-flash-latest"
+      primaryModel: "gemini-2.5-flash",
+      fallbackModel: "gemini-2.0-flash"
     });
 
     return res.json({
