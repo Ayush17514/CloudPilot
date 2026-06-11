@@ -1,5 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI } from "@google/genai";
+import { getTracer } from "./telemetry";
+
+const tracerPromise = getTracer();
 
 // Initialize Gemini safely
 let ai: GoogleGenAI | null = null;
@@ -64,28 +67,31 @@ async function generateWithRetry(
   aiClient: GoogleGenAI,
   params: { contents: any; config?: any; primaryModel?: string; fallbackModel?: string }
 ) {
-  const primaryModel = params.primaryModel || "gemini-2.5-flash";
-  const fallbackModel = params.fallbackModel || "gemini-2.0-flash";
-  const maxRetries = 3;
-  let delay = 1000;
+  const tracer = await tracerPromise;
+  return await tracer.startActiveSpan("generateContentWithRetry", async (parentSpan: any) => {
+    const primaryModel = params.primaryModel || "gemini-2.5-flash";
+    const fallbackModel = params.fallbackModel || "gemini-2.0-flash";
+    const maxRetries = 3;
+    let delay = 1000;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const modelToUse = attempt === maxRetries ? fallbackModel : primaryModel;
-    try {
-      return await aiClient.models.generateContent({
-        model: modelToUse,
-        contents: params.contents,
-        config: params.config,
-      });
-    } catch (err: any) {
-      if (attempt === maxRetries) throw err;
-      const isTransient =
-        err?.status === 503 || err?.status === 429 || err?.message?.includes("503") || err?.message?.includes("429");
-      await new Promise((r) => setTimeout(r, isTransient ? delay : 300));
-      delay *= 2;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const modelToUse = attempt === maxRetries ? fallbackModel : primaryModel;
+      try {
+        return await aiClient.models.generateContent({
+          model: modelToUse,
+          contents: params.contents,
+          config: params.config,
+        });
+      } catch (err: any) {
+        if (attempt === maxRetries) throw err;
+        const isTransient =
+          err?.status === 503 || err?.status === 429 || err?.message?.includes("503") || err?.message?.includes("429");
+        await new Promise((r) => setTimeout(r, isTransient ? delay : 300));
+        delay *= 2;
+      }
     }
-  }
-  throw new Error("Failed after retries");
+    throw new Error("Failed after retries");
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
