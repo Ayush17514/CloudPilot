@@ -388,7 +388,7 @@ export default function App() {
 
           {/* 🔍 Arize Observability Telemetry Link */}
           <a
-            href="http://localhost:6006"
+            href="https://app.arize.com"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold tracking-wide text-emerald-400 hover:text-emerald-300 border border-emerald-500/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all select-none mt-1"
