@@ -18,7 +18,7 @@ const noOpTracer = {
 
 const phoenixEnabled = process.env.PHOENIX_ENABLED !== "false";
 
-export async function getTracer() {
+export async function getTracer(): Promise<any> {
   if (!phoenixEnabled) {
     return noOpTracer;
   }

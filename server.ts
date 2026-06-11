@@ -26,27 +26,29 @@ const noOpTracer = {
 
 const phoenixEnabled = process.env.PHOENIX_ENABLED !== "false";
 
-if (phoenixEnabled) {
-  try {
-    const phoenixOtel = await import("@arizeai/phoenix-otel");
-    const collectorEndpoint = process.env.PHOENIX_COLLECTOR_ENDPOINT || undefined;
+async function initPhoenix() {
+  if (phoenixEnabled) {
+    try {
+      const phoenixOtel = await import("@arizeai/phoenix-otel");
+      const collectorEndpoint = process.env.PHOENIX_COLLECTOR_ENDPOINT || undefined;
 
-    phoenixOtel.register({
-      projectName: "cloudpilot-ai",
-      ...(collectorEndpoint ? { endpoint: collectorEndpoint } : {}),
-    });
+      phoenixOtel.register({
+        projectName: "cloudpilot-ai",
+        ...(collectorEndpoint ? { endpoint: collectorEndpoint } : {}),
+      });
 
-    tracer = phoenixOtel.trace.getTracer("cloudpilot-gemini");
-    console.log("CloudPilot: ✅ Arize Phoenix OTel tracing initialized successfully.");
-  } catch (error: any) {
-    console.warn(
-      `CloudPilot: ⚠️ Arize Phoenix tracing unavailable (${error?.message || "unknown error"}). Running without tracing.`
-    );
+      tracer = phoenixOtel.trace.getTracer("cloudpilot-gemini");
+      console.log("CloudPilot: ✅ Arize Phoenix OTel tracing initialized successfully.");
+    } catch (error: any) {
+      console.warn(
+        `CloudPilot: ⚠️ Arize Phoenix tracing unavailable (${error?.message || "unknown error"}). Running without tracing.`
+      );
+      tracer = noOpTracer;
+    }
+  } else {
+    console.log("CloudPilot: Phoenix tracing disabled via PHOENIX_ENABLED=false.");
     tracer = noOpTracer;
   }
-} else {
-  console.log("CloudPilot: Phoenix tracing disabled via PHOENIX_ENABLED=false.");
-  tracer = noOpTracer;
 }
 
 // --- Express Server Setup ---
@@ -429,6 +431,7 @@ Keep answers under 3 paragraphs for layout readability, formatted in attractive 
 
 // Vite middleware configuration for full-stack integration
 async function startServer() {
+  await initPhoenix();
   if (process.env.NODE_ENV !== "production") {
     console.log("CloudPilot: Running in development mode using Vite.");
     const vite = await createViteServer({
