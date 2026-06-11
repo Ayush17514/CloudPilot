@@ -1,31 +1,10 @@
 {
-  "version": 2,
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "dist",
-  "framework": null,
-  "builds": [
-    {
-      "src": "api/**/*.ts",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/cloudpilot/investigate",
-      "dest": "/api/cloudpilot/investigate.ts"
-    },
-    {
-      "src": "/api/cloudpilot/chat",
-      "dest": "/api/cloudpilot/chat.ts"
-    },
-    {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
+  "rewrites": [
+    { "source": "/api/cloudpilot/investigate", "destination": "/api/cloudpilot/investigate" },
+    { "source": "/api/cloudpilot/chat", "destination": "/api/cloudpilot/chat" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
